@@ -47,7 +47,7 @@ var redisClient *redis.Client
 func reportServiceActive(serviceName string) {
 	log.Debug("Reporting " + serviceName + " as active with IP " + configuration.LocalIp)
 	// write {timestamp => SERVICENAME_IP} to ecssd:service_pings
-	redisClient.ZAddNX("redecs:service_pings", redis.Z{float64(time.Now().Unix()), serviceName + "_" + configuration.LocalIp})
+	redisClient.ZAdd("redecs:service_pings", redis.Z{float64(time.Now().Unix()), serviceName + "_" + configuration.LocalIp})
 }
 
 func getServiceName(container *docker.Container) string {
