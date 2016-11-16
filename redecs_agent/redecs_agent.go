@@ -7,6 +7,7 @@ package main
 // ZSET and write changes to AWS Route53.
 
 import (
+	docker_router "redecs/docker_router"
 	"errors"
 	"fmt"
 	log "github.com/Sirupsen/logrus"
@@ -21,8 +22,6 @@ import (
 )
 
 type config struct {
-	EcsCluster string
-	Region     string
 	LocalIp    string
 	RedisHost  string
 }
@@ -44,12 +43,37 @@ func logErrorNoFatal(err error) {
 var dockerClient *docker.Client
 var redisClient *redis.Client
 
-func reportServiceActive(serviceName string) {
-	log.Debug("Reporting " + serviceName + " as active with IP " + configuration.LocalIp)
-	// write {timestamp => SERVICENAME_IP} to ecssd:service_pings
-	redisClient.ZAdd("redecs:service_pings", redis.Z{float64(time.Now().Unix()), serviceName + "_" + configuration.LocalIp})
+// This reports an instance as active. It adds it to the redecs:service_pings set
+// and publishes a redecs:service_channel event.
+func reportServiceActive(serviceName string) error {
+	log.Debugf("Reporting %s as active with IP %s", serviceName, configuration.LocalIp)
+	value := serviceName + "_" + configuration.LocalIp
+	// write {timestamp => SERVICENAME_IP} to redecs:service_pings
+	err := redisClient.ZAdd("redecs:service_pings", redis.Z{float64(time.Now().Unix()), value}).Err()
+	if err != nil {
+		return err
+	}
+	// notify the channel that this service has been reported active
+	err = redisClient.Publish("redecs:service_channel", "+"+value).Err()
+	return err
 }
 
+// This reports an instance as inactive. It removes it from the redecs:service_pings set
+// and publishes a redecs:service_channel event.
+func reportServiceInactive(serviceName string) error {
+	log.Debugf("Reporting %s as active with IP %s", serviceName, configuration.LocalIp)
+	value := serviceName + "_" + configuration.LocalIp
+	// remove SERVICENAME_IP from redecs:service_pings
+	err := redisClient.ZRem("redecs:service_pings", value).Err()
+	if err != nil {
+		return err
+	}
+	// notify the channel that this service has been reported active
+	err = redisClient.Publish("redecs:service_channel", "-"+value).Err()
+	return err
+}
+
+// Gets the service name from a Docker container environment variable, if present.
 func getServiceName(container *docker.Container) string {
 	// One of the environment variables should be SERVICE_<port>_NAME = <name of the service>
 	// We look for this environment variable doing a split in the "=" and another one in the "_"
@@ -131,6 +155,58 @@ func main() {
 		time.Sleep(time.Duration(sum) * time.Second)
 		sum += 2
 	}
+
+	startFn := func(event *docker.APIEvents) error {
+		var err error
+		container, err := dockerClient.InspectContainer(event.ID)
+		logErrorAndFail(err)
+		service := getServiceName(container)
+		if service != "" {
+			sum = 1
+			for {
+				if err = reportServiceActive(service); err == nil {
+					break
+				}
+				if sum > 8 {
+					log.Errorf("Error reporting service %s active", service)
+					break
+				}
+				time.Sleep(time.Duration(sum) * time.Second)
+				sum += 2
+			}
+		}
+		log.Debugf("Docker %s started", event.ID)
+		return nil
+	}
+
+	stopFn := func(event *docker.APIEvents) error {
+		var err error
+		container, err := dockerClient.InspectContainer(event.ID)
+		logErrorAndFail(err)
+		service := getServiceName(container)
+		if service != "" {
+			sum = 1
+			for {
+				if err = reportServiceInactive(service); err == nil {
+					break
+				}
+				if sum > 8 {
+					log.Errorf("Error reporting service %s inactive", service)
+					break
+				}
+				time.Sleep(time.Duration(sum) * time.Second)
+				sum += 2
+			}
+		}
+		log.Debugf("Docker %s stopped", event.ID)
+		return nil
+	}
+
+	dockerRouter, err := docker_router.AddStartStopHandlers(startFn, stopFn, dockerClient)
+	defer dockerRouter.Stop()
+	logErrorAndFail(err)
+
+	log.Debug("Waiting for Docker events")
 
 	// continue processing once per minute
 	ticker := time.NewTicker(time.Second * 60)
