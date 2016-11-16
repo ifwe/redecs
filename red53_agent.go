@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/route53"
 	"gopkg.in/redis.v5"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -121,12 +122,12 @@ func fetchActiveServices() {
 
 	// Fetch last "fetchLast" seconds of service pings
 	now := time.Now().Unix()
-	epoch := now - fetchLast // seconds
+	epoch := strconv.FormatInt(now - fetchLast, 10) // seconds (string)
 
 	// Try several times with exponential backoff.
 	sum = 1
 	for {
-		servicePings, err = redisClient.ZRange("redecs:service_pings", epoch, now).Result()
+		servicePings, err = redisClient.ZRangeByScore("redecs:service_pings", redis.ZRangeBy{Min:epoch, Max:"+inf"}).Result()
 
 		if err == nil {
 			break
