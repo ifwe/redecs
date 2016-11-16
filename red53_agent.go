@@ -20,8 +20,8 @@ import (
 	"time"
 )
 
-const checkInterval = 5 * time.Minute // how often to check Redis
-const defaultTTL = 60                 // seconds
+const checkInterval = 1 * time.Minute // how often to check Redis
+const defaultTTL = 300                // seconds
 const fetchLast = 300                 // seconds
 
 var DNSName = "servicediscovery.local"
