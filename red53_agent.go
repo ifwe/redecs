@@ -196,11 +196,13 @@ func main() {
 		sum += 2
 	}
 
-	http.HandleFunc("/healthcheck", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "OK")
-	})
+	go func() {
+		http.HandleFunc("/healthcheck", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, "OK")
+		})
 
-	log.Fatal(http.ListenAndServe(":8080", nil))
+		log.Fatal(http.ListenAndServe(":8080", nil))
+	}()
 
 	// check regularly, specified by checkInterval
 	ticker := time.NewTicker(checkInterval)
