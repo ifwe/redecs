@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/route53"
 	"gopkg.in/redis.v5"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -194,6 +195,12 @@ func main() {
 		time.Sleep(time.Duration(sum) * time.Second)
 		sum += 2
 	}
+
+	http.HandleFunc("/healthcheck", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "OK")
+	})
+
+	log.Fatal(http.ListenAndServe(":8080", nil))
 
 	// check regularly, specified by checkInterval
 	ticker := time.NewTicker(checkInterval)
