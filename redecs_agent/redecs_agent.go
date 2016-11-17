@@ -63,7 +63,7 @@ func reportServiceActive(serviceName string) error {
 // This reports an instance as inactive. It removes it from the redecs:service_pings set
 // and publishes a redecs:service_channel event.
 func reportServiceInactive(serviceName string) error {
-	log.Debugf("Reporting %s as active with IP %s", serviceName, configuration.LocalIp)
+	log.Debugf("Reporting %s as inactive with IP %s", serviceName, configuration.LocalIp)
 	value := serviceName + "_" + configuration.LocalIp
 	// remove SERVICENAME_IP from redecs:service_pings
 	err := redisClient.ZRem("redecs:service_pings", value).Err()
@@ -207,6 +207,7 @@ func main() {
 	dockerRouter, err := docker_router.AddStartStopHandlers(startFn, stopFn, dockerClient)
 	defer dockerRouter.Stop()
 	logErrorAndFail(err)
+	dockerRouter.Start()
 
 	log.Debug("Waiting for Docker events")
 

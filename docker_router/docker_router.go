@@ -38,7 +38,7 @@ func dockerEventsRouter(bufferSize int, workerPoolSize int, dockerClient *docker
 	return DockerRouter, nil
 }
 
-func (e *DockerRouter) start() error {
+func (e *DockerRouter) Start() error {
 	go e.manageEvents()
 	return e.dockerClient.AddEventListener(e.listener)
 }
