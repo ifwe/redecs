@@ -22,9 +22,9 @@ import (
 	"time"
 )
 
-const checkInterval = 1 * time.Minute // how often to check Redis
-const defaultTTL = 300                // seconds
-const fetchLast = 300                 // seconds
+const checkInterval = 30 * time.Second // how often to check Redis
+const defaultTTL = 300                 // DNS record time to live (seconds)
+const fetchLast = 90                   // how far back to fetch (seconds)
 
 var DNSName = "servicediscovery.local"
 var modifyMutex = &sync.Mutex{}

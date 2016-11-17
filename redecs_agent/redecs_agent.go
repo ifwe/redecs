@@ -21,6 +21,8 @@ import (
 	"time"
 )
 
+const checkInterval = 30 * time.Second // how often to check Docker
+
 type config struct {
 	LocalIp    string
 	RedisHost  string
@@ -209,7 +211,7 @@ func main() {
 	log.Debug("Waiting for Docker events")
 
 	// continue processing once per minute
-	ticker := time.NewTicker(time.Second * 60)
+	ticker := time.NewTicker(checkInterval)
 
 	for {
 		processContainers()
