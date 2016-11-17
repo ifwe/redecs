@@ -18,6 +18,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -26,6 +27,7 @@ const defaultTTL = 300                // seconds
 const fetchLast = 300                 // seconds
 
 var DNSName = "servicediscovery.local"
+var modifyMutex = &sync.Mutex{}
 
 func logErrorAndFail(err error) {
 	if err != nil {
@@ -94,7 +96,7 @@ func modifyDNSRecord(serviceName string, ips []string) error {
 	}
 	_, err = r53.ChangeResourceRecordSets(params)
 	logErrorNoFatal(err)
-	log.Debug(fmt.Sprintf("Record %s.%s updated with %d records.", serviceName, DNSName, len(ips)))
+	log.Debugf("Record %s.%s updated with %d records.", serviceName, DNSName, len(ips))
 	return err
 }
 
@@ -119,6 +121,8 @@ func fetchActiveServices() {
 	var servicePings []string
 	var sum int
 	var err error
+	modifyMutex.Lock()
+	defer modifyMutex.Unlock()
 	log.Debug("Fetching active services ...")
 
 	// Fetch last "fetchLast" seconds of service pings
@@ -142,7 +146,6 @@ func fetchActiveServices() {
 	}
 
 	processServicePings(servicePings)
-
 	log.Debug("Done fetching active services.")
 }
 
@@ -204,12 +207,28 @@ func main() {
 		log.Fatal(http.ListenAndServe(":8080", nil))
 	}()
 
-	// check regularly, specified by checkInterval
-	ticker := time.NewTicker(checkInterval)
+	serviceChanges, err := redisClient.Subscribe("redecs:service_channel")
+	logErrorAndFail(err)
+	defer serviceChanges.Close()
 
+	// process timer fetches asynchronously
+	go func() {
+		// check regularly, specified by checkInterval
+		ticker := time.NewTicker(checkInterval)
+
+		for {
+			fetchActiveServices()
+			<-ticker.C
+		}
+	}()
+
+	// poll Redis for changes on this channel
 	for {
-		// TODO: Add Redis Pub/Sub
-		fetchActiveServices()
-		<-ticker.C
+		msg, err := serviceChanges.ReceiveMessage()
+		if err != nil {
+			logErrorNoFatal(err)
+		} else if msg != nil {
+			fetchActiveServices()
+		}
 	}
 }
