@@ -47,11 +47,6 @@ func reportActiveService(serviceName string) error {
 	value := serviceName + "_" + configuration.LocalIp
 	// write {timestamp => SERVICENAME_IP} to redecs:service_pings
 	err := redisClient.ZAdd("redecs:service_pings", redis.Z{float64(time.Now().Unix()), value}).Err()
-	if err != nil {
-		return err
-	}
-	// notify the channel that this service has been reported active
-	err = redisClient.Publish("redecs:service_channel", "+"+value).Err()
 	return err
 }
 
